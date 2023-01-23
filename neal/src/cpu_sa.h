@@ -50,6 +50,7 @@ typedef bool (*const callback)(void * const function);
 int general_simulated_annealing(
     char *states,
     double *energies,
+    double *times,
     const int num_samples,
     const std::vector<double> h,
     const std::vector<int> coupler_starts,

@@ -28,20 +28,11 @@ import dimod
 import numpy as np
 
 import neal.simulated_annealing as sa
+from .timer import Timer
 
 import warnings
 
 _a = time.time()
-
-def tic():
-    global _a
-    _a = time.time()
-
-def toc(s=""):
-    global _a
-    delta = time.time() - _a
-    print(f"{s}: {1e3*delta:.2f} ms")
-    _a = time.time()
 
 
 __all__ = ["Neal", "SimulatedAnnealingSampler", "default_beta_range"]
@@ -124,7 +115,7 @@ class SimulatedAnnealingSampler(dimod.Sampler, dimod.Initialized):
         self.properties = {'beta_schedule_options': ('linear', 'geometric',
                                                      'custom')}
 
-    def sample(self, bqm, beta_range=None, num_reads=None, num_sweeps = None,
+    def sample(self, bqm, timer: Timer=None, beta_range=None, num_reads=None, num_sweeps = None,
                num_sweeps_per_beta=1, beta_schedule_type="geometric", seed=None,
                interrupt_function=None, beta_schedule = None,
                initial_states=None, initial_states_generator="random",
@@ -242,8 +233,8 @@ class SimulatedAnnealingSampler(dimod.Sampler, dimod.Initialized):
             True
 
         """
+        b = time.time()
         a = time.time()
-        tic()
         # get the original vartype so we can return consistently
         original_vartype = bqm.vartype
 
@@ -263,8 +254,8 @@ class SimulatedAnnealingSampler(dimod.Sampler, dimod.Initialized):
             error_msg = ("'seed' should be an integer between 0 and 2^32 - 1: "
                          "value = {}".format(seed))
             raise ValueError(error_msg)
-        toc("preprocess")
-
+        timer.preprocess += time.time() - a
+        a = time.time()
         # parse the inputs
         parsed = self.parse_initial_states(
             bqm,
@@ -281,13 +272,15 @@ class SimulatedAnnealingSampler(dimod.Sampler, dimod.Initialized):
 
         variable_order = parsed.initial_states.variables
 
-        toc("initial states")
+        timer.initial_states += time.time() - a
+        a = time.time()
 
         # read out the BQM
         ldata, (irow, icol, qdata), off = bqm.to_numpy_vectors(
             variable_order=variable_order)
 
-        toc("to numpy")
+        timer.initial_states += time.time() - a
+        a = time.time()
 
         if interrupt_function and not callable(interrupt_function):
             raise TypeError("'interrupt_function' should be a callable")
@@ -354,14 +347,17 @@ class SimulatedAnnealingSampler(dimod.Sampler, dimod.Initialized):
                     beta_schedule = np.geomspace(*beta_range, num=num_betas)
                 else:
                     raise ValueError("Beta schedule type {} not implemented".format(beta_schedule_type))
-        toc("beta range")
+
+        timer.beta_range += time.time() - a
+        a = time.time()
         # run the simulated annealing algorithm
         samples, energies = sa.simulated_annealing(
             num_reads, ldata, irow, icol, qdata,
             num_sweeps_per_beta, beta_schedule,
-            seed, initial_states_array, interrupt_function)
+            seed, initial_states_array, timer, interrupt_function)
 
-        toc("simulated annealing")
+        timer.simulated_annealing += time.time() - a
+        a = time.time()
         info = {
             "beta_range": beta_range,
             "beta_schedule_type": beta_schedule_type
@@ -374,9 +370,9 @@ class SimulatedAnnealingSampler(dimod.Sampler, dimod.Initialized):
         )
 
         response.change_vartype(original_vartype, inplace=True)
-        toc("resp")
+        timer.response += time.time() - a
 
-        print(time.time() - a)
+        timer.sample_call += time.time() - b
 
         return response
 

@@ -234,6 +234,7 @@ double get_state_energy(
 int general_simulated_annealing(
     char* states,
     double* energies,
+    double* times,
     const int num_samples,
     const vector<double> h,
     const vector<int> coupler_starts,
@@ -249,7 +250,7 @@ int general_simulated_annealing(
     // assert len(states) == num_samples*num_vars*sizeof(char)
     // assert len(coupler_starts) == len(coupler_ends) == len(coupler_weights)
     // assert max(coupler_starts + coupler_ends) < num_vars
-    auto begin = chrono::steady_clock::now();
+    auto begin1 = chrono::steady_clock::now();
     // the number of variables in the problem
     const int num_vars = h.size();
     if (!((coupler_starts.size() == coupler_ends.size()) &&
@@ -296,7 +297,7 @@ int general_simulated_annealing(
 
     auto end = chrono::steady_clock::now();
 
-    cout << "CPP init = " << chrono::duration_cast<chrono::microseconds>(end - begin).count() * 1e-3 << " [ms]" << endl;
+    times[0] = chrono::duration_cast<chrono::microseconds>(end - begin1).count() * 1e-6;
 
     // get the simulated annealing samples
     int sample = 0;
@@ -321,9 +322,10 @@ int general_simulated_annealing(
         if (interrupt_function && interrupt_callback(interrupt_function)) break;
     }
 
-    begin = chrono::steady_clock::now();
+    auto end2 = chrono::steady_clock::now();
 
-    cout << "CPP SA = " << chrono::duration_cast<chrono::microseconds>(begin - end).count() * 1e-3 << " [ms]" << endl;
+    times[1] = chrono::duration_cast<chrono::microseconds>(end2 - end).count() * 1e-6;
+    times[2] = chrono::duration_cast<chrono::microseconds>(end2 - begin1).count() * 1e-6;
     // return the number of samples we actually took
     return sample;
 }

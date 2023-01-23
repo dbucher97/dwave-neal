@@ -17,6 +17,7 @@
 
 from libcpp cimport bool
 from libcpp.vector cimport vector
+from .timer import Timer
 
 import numpy as np
 cimport numpy as np
@@ -28,6 +29,7 @@ cdef extern from "cpu_sa.h":
     int general_simulated_annealing(
             char* samples,
             double* energies,
+            double* times,
             const int num_samples,
             const vector[double] & h,
             const vector[int] & coupler_starts,
@@ -43,7 +45,7 @@ cdef extern from "cpu_sa.h":
 def simulated_annealing(num_samples, h, coupler_starts, coupler_ends,
                         coupler_weights, sweeps_per_beta, beta_schedule, seed,
                         np.ndarray[char, ndim=2, mode="c"] states_numpy,
-                        interrupt_function=None):
+                        timer: Timer, interrupt_function=None):
     """Wraps `general_simulated_annealing` from `cpu_sa.cpp`. Accepts
     an Ising problem defined on a general graph and returns samples
     using simulated annealing.
@@ -104,6 +106,8 @@ def simulated_annealing(num_samples, h, coupler_starts, coupler_ends,
     """
     num_vars = len(h)
 
+    print(len(coupler_starts), len(coupler_ends))
+
     # in the case that we either need no samples or there are no variables,
     # we can safely return an empty array (and set energies to 0)
     if num_samples*num_vars == 0:
@@ -114,9 +118,13 @@ def simulated_annealing(num_samples, h, coupler_starts, coupler_ends,
     energies_numpy = np.empty(num_samples, dtype=np.float64)
     cdef double[:] energies = energies_numpy
 
+    times_numpy = np.empty(3, dtype=np.float64)
+    cdef double[:] times = times_numpy
+
     # explicitly convert all Python types to C while we have the GIL
     cdef char* _states = &states_numpy[0, 0]
     cdef double* _energies = &energies[0]
+    cdef double* _times = &times[0]
     cdef int _num_samples = num_samples
     cdef vector[double] _h = h
     cdef vector[int] _coupler_starts = coupler_starts
@@ -135,6 +143,7 @@ def simulated_annealing(num_samples, h, coupler_starts, coupler_ends,
     with nogil:
         num = general_simulated_annealing(_states,
                                           _energies,
+                                          _times,
                                           _num_samples,
                                           _h,
                                           _coupler_starts,
@@ -146,6 +155,9 @@ def simulated_annealing(num_samples, h, coupler_starts, coupler_ends,
                                           interrupt_callback,
                                           _interrupt_function)
 
+    timer.cpp_init = times[0]
+    timer.cpp_sa = times[1]
+    timer.cpp_full = times[2]
     # discard the noise if we were interrupted
     return states_numpy[:num], energies_numpy[:num]
 
